@@ -1,0 +1,12 @@
+[package]
+name = "ouro-rs"
+version = "0.1.0"
+edition = "2021"
+authors = ["Alexei Boukirev <aboukirev@gmail.com>"]
+license = "MIT"
+
+[lib]
+name = "ouro_rs"
+path = "src/lib.rs"
+
+[dependencies]
