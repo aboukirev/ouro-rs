@@ -10,3 +10,4 @@ name = "ouro_rs"
 path = "src/lib.rs"
 
 [dependencies]
+rand = "0.8.5"
