@@ -1,4 +1,4 @@
-use std::fmt;
+pub(crate) use std::fmt;
 use rand::Rng;
 
 #[derive(Debug)]
@@ -34,7 +34,7 @@ impl<'a> RtpPacket<'a> {
     // The size of the fixed part of the packet, up to and inclding SSRC.
     const HEADER_SIZE: usize = 12;
     // Fixed RTP protocol version.
-    const RTP_VERSION: u8 = 2;
+    const VERSION: u8 = 2;
 
     pub fn new(
         mark: bool,
@@ -63,7 +63,7 @@ impl<'a> RtpPacket<'a> {
             return Err(RtpError::InvalidLen(slice_len))
         }
         let version = slice[0] >> 6;
-        if version != RtpPacket::RTP_VERSION {
+        if version != RtpPacket::VERSION {
             return Err(RtpError::InvalidVersion(version))
         }
         let cc = slice[0] & 0x0F;
@@ -166,9 +166,13 @@ impl RtpPacketizer {
 
     pub fn packetize<'a>(&'a mut self, payload: &'a [u8], frames: u32) -> Vec<RtpPacket<'_>> {
         self.timestamp = self.timestamp.wrapping_add(frames);
+        // If mtu is too large or too small, give it a reasonable size based on payload size and common sense.
+        if self.mtu <= RtpPacket::HEADER_SIZE {
+            self.mtu = 100
+        }
         // At this point assume just a standard fixed header, no csrc, no extension.  Only the last chunk may require padding.
         let chunk_size = self.mtu - RtpPacket::HEADER_SIZE;
-        let chunk_count = payload.len().div_ceil(chunk_size);
+        let chunk_count = payload.len() / chunk_size + 1;
         let mut packets = Vec::<RtpPacket>::with_capacity(chunk_count);
 
         for index in 0..chunk_count {
@@ -326,6 +330,21 @@ mod tests {
     fn packetize_two_packets() {
         let data = [0u8; 128];
         let mut packetizer = RtpPacketizer::new(100, 98, 0x1234ABCD);
+        let packets = packetizer.packetize(&data, 2000);
+        assert_eq!(2, packets.len());
+        let packet = packets.get(1).unwrap();
+        assert!(packet.extension.is_none());
+        assert_eq!(0, packet.cc);
+        assert!(packet.mark);
+        assert_eq!(98, packet.payload_type);
+        assert_eq!(0x1234ABCD, packet.ssrc);
+        assert_eq!(40, packet.payload.len());
+    }
+
+    #[test]
+    fn packetize_undersize_mtu() {
+        let data = [0u8; 128];
+        let mut packetizer = RtpPacketizer::new(10, 98, 0x1234ABCD);
         let packets = packetizer.packetize(&data, 2000);
         assert_eq!(2, packets.len());
         let packet = packets.get(1).unwrap();
